@@ -95,7 +95,8 @@ function actionClick(obj, playerColor)
         for i,v in pairs(deckCounter) do
             v.editButton({index = 0, label = deck.getQuantity()})
         end
-        broadcastToAll(Player[otherColors(obj.getDescription())[1]].steam_name .. "'s turn! Resolve outstanding actions.", otherColors(obj.getDescription())[1])
+        local playerName = Player[otherColors(obj.getDescription())[1]].steam_name or "Opponent"
+        broadcastToAll(playerName .. "'s turn! Resolve outstanding actions.", otherColors(obj.getDescription())[1])
 
         local curr_rot = obj.getRotation()
         obj.setRotationSmooth({curr_rot.x,curr_rot.y,curr_rot.z+180}, false, false)
@@ -162,7 +163,7 @@ function sdLabel(obj)
     button.width = 0
     button.font_size = 70
     button.font_color = col
-    button.position={0,0,0}
+    button.position={0,0.5,0}
     obj.createButton(button)
 end
 
@@ -174,7 +175,7 @@ function exchangeLabel(obj)
     button.label = "[b]"..obj.getName().."[/b]\nShared With\nOpponent"
     button.font_size = 55
     button.font_color = "Grey"
-    button.position={0,0.2,0}
+    button.position={0,0.5,0}
     obj.createButton(button)
 end
 
@@ -302,14 +303,6 @@ function onLoad()
     deck.setInvisibleTo(allColor)
     newDeck.setInvisibleTo(allColor)
     deck.shuffle()
-    
-    discard.putObject(deck.takeObject({index=1}))
-    
-    for i,v in pairs(fixedColor) do
-        deck.deal(6, v)
-    end
-
-    Wait.time(sortCardsAll, 1)
     initialBL()
 end
 
@@ -420,16 +413,23 @@ function sortCardsButton(player, value, id)
 end
 
 function startClicked(player, value, id)
-    if deck.getQuantity() == 8 then
+    if deck.getQuantity() == 21 then
+        discard.putObject(deck.takeObject({index=1}))
+        
+        for i,v in pairs(fixedColor) do
+            deck.deal(6, v)
+        end
+
         firstPlayer = player.color
         playerTurn = player.color
         deck.deal(1, player.color)
-        Wait.time(function() sortCards(player.color) end, 1)
+        Wait.time(sortCardsAll, 1)
 
         for i,v in pairs(deckCounter) do
             v.editButton({index = 0, label = deck.getQuantity()})
         end
-        broadcastToAll(Player[player.color].steam_name.."'s turn!", player.color)
+        local playerName = Player[player.color].steam_name or "Opponent"
+        broadcastToAll(playerName.."'s turn!", player.color)
     else
         broadcastToColor("Additional dealing happens after actions are clicked.", player.color, player.color)
     end
@@ -541,7 +541,8 @@ function nextRound()
 
     for i,v in pairs(fixedColor) do
         if colorPosition[v].geishas > 3 or colorPosition[v].victoryPoints > 10 then
-            broadcastToAll(Player[v].steam_name.."is the winner!", v)
+            local playerName = Player[v].steam_name or "Opponent"
+            broadcastToAll(playerName.."is the winner!", v)
             goto done
         end
     end
@@ -554,6 +555,10 @@ function nextRound()
             v.setRotationSmooth({curr_rot.x,curr_rot.y,0}, false, false)
             colorPosition[v.getDescription()].actionCount = 0
             colorPosition[v.getDescription()].actions[v.getName()].flipped = false
+            if v.getButtons() then
+                v.removeButton(0)
+            end
+            actionButton(v)
         end
     end
     for i,v in pairs(deck.getObjects()) do
@@ -568,11 +573,13 @@ function nextRound()
             for i = 1,21 do
                 deck.putObject(nd.takeObject())
             end;
+            deck.shuffle();
             discard.putObject(deck.takeObject({index=1}));
             for i,v in pairs(fixedColor) do
                 deck.deal(6, v)
             end;
             deck.deal(1, firstPlayer);
+            sortCardsAll();
             for i,v in pairs(deckCounter) do
                 v.editButton({index = 0, label = deck.getQuantity()})
             end;
