@@ -1,0 +1,22 @@
+<!-- Xml UI. See documentation: https://api.tabletopsimulator.com/ui/introUI/ -->
+<Defaults>
+  <Button colors="#828282|white|#828282" textColor="#000000" fontStyle="Bold" fontSize="16"/>
+  <ToggleButton class="@HorizontalLayout:@ToggleButton" deselectedBackgroundColor="rgba(0,0,0,0)" deselectedIconColor="#696969" onValueChanged="toggleClicked"/>
+</Defaults>
+
+<Button id="showButtons" onClick="showButtons" width="23" height="25" text="&#x25B2;" fontSize="12" rectAlignment="UpperRight" offsetXY="-414 0"></Button>
+
+<VerticalLayout id="buttons" padding="0 0 0 20" rectAlignment="UpperRight" offsetXY="-250 0" height="150" width="164">
+  <Button id="startGame" onClick="startClicked" text="Start Game"></Button>
+  <Button id="sortHand" onClick="sortCardsButton" text="Sort Hand"></Button>
+  <Button id="scoreGame" onClick="scoreClicked" text="Score Game"></Button>
+  <Button id="resetGame" onClick="resetClicked" text="Reset Game"></Button>
+</VerticalLayout>
+
+<Panel id="reset" height="200" width="500" color="#000000F0" allowDragging="true" returnToOriginalPositionWhenReleased="false" showAnimation="FadeIn" hideAnimation="FadeOut" animationDuration="1" active="false">
+  <Text id="title" position="0 50 0" fontStyle="Bold" fontSize="24" text="Are you sure you want to reset?" color="#828282"></Text>
+  <HorizontalLayout offsetXY="0 -50" height="50" width="350" spacing="10">
+    <Button id="yesReset" onClick="yesResetClicked" text="Yes"></Button>
+    <Button id="noReset" onClick="noResetClicked" text="No"></Button>
+  </HorizontalLayout>
+</Panel>
