@@ -53,20 +53,31 @@ function actionClick(obj, playerColor)
         goto done
     end
     if playerColor == obj.getDescription() then
-        if deck.getQuantity() == 8 then
+        if deck.getQuantity() == 21 then
             broadcastToAll("No one has drawn the first item card! Click Start Game", playerColor)
             for i,v in pairs(deckCounter) do
                 v.highlightOn(stringColorToRGB("Yellow"), 2)
             end
             goto done
         end
-        if playerTurn ~= obj.getDescription() then
-            broadcastToColor("You must wait for your opponent to perform an action!", playerColor, playerColor)
+        -- if playerTurn ~= obj.getDescription() and #colorPosition[otherColors(obj.getDescription())[1]].exchangeZone.getObjects() > 1 then
+        --     broadcastToAll("Complete previous action!", playerColor)
+        --     colorPosition[otherColors(obj.getDescription())[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+        --     goto done
+        -- end
+        if playerTurn ~= obj.getDescription() and colorPosition[otherColors(obj.getDescription())[1]].actionCount == 0 and colorPosition[obj.getDescription()].actionCount == 0 then
+            broadcastToColor("Opponent needs to perform first action!", playerColor, playerColor)
             goto done
         end
-        if playerTurn == obj.getDescription() and #colorPosition[otherColors(obj.getDescription())[1]].exchangeZone.getObjects() > 1 then
-            broadcastToAll("Complete previous action!", playerColor)
+        if playerTurn ~= obj.getDescription() then
             colorPosition[otherColors(obj.getDescription())[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+            colorPosition[obj.getDescription()].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+            broadcastToColor("Are all actions complete? Do you need to draw an item card?", playerColor, playerColor)
+            goto done
+        end
+        if (playerColor == firstPlayer and colorPosition[playerColor].actionCount - colorPosition[otherColors(playerColor)[1]].actionCount > 0) 
+        or (playerColor ~= firstPlayer and colorPosition[otherColors(playerColor)[1]].actionCount - colorPosition[playerColor].actionCount < 1) then
+            broadcastToColor("You already performed an action! Opponent's turn.", playerColor, playerColor)
             goto done
         end
         if obj.getName() == "T1" and #colorPosition[obj.getDescription()].secretZone.getObjects() ~= 2 then
@@ -90,13 +101,22 @@ function actionClick(obj, playerColor)
             goto done
         end
 
-        deck.deal(1, otherColors(obj.getDescription())[1])
-        Wait.time(function() sortCards(otherColors(obj.getDescription())[1]) end, 1)
-        for i,v in pairs(deckCounter) do
-            v.editButton({index = 0, label = deck.getQuantity()})
+        if obj.getName() == "T1" or obj.getName() == "T2" then
+            if #colorPosition[otherColors(obj.getDescription())[1]].exchangeZone.getObjects() > 1 or #colorPosition[obj.getDescription()].exchangeZone.getObjects() > 1 then
+                broadcastToAll("Complete previous action!", playerColor)
+                colorPosition[otherColors(obj.getDescription())[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+                colorPosition[obj.getDescription()].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+                goto done
+            end
+            deck.deal(1, otherColors(playerColor)[1])
+            Wait.time(function() sortCards(otherColors(playerColor)[1]) end, 1)
+            for i,v in pairs(deckCounter) do
+                v.editButton({index = 0, label = deck.getQuantity()})
+            end
+            local playerName = Player[otherColors(playerColor)[1]].steam_name or "Opponent"
+            broadcastToAll(playerName .. "'s turn!", otherColors(playerColor)[1])
+            playerTurn = otherColors(playerColor)[1]
         end
-        local playerName = Player[otherColors(obj.getDescription())[1]].steam_name or "Opponent"
-        broadcastToAll(playerName .. "'s turn! Resolve outstanding actions.", otherColors(obj.getDescription())[1])
 
         local curr_rot = obj.getRotation()
         obj.setRotationSmooth({curr_rot.x,curr_rot.y,curr_rot.z+180}, false, false)
@@ -104,8 +124,6 @@ function actionClick(obj, playerColor)
 
         colorPosition[obj.getDescription()].actionCount = colorPosition[obj.getDescription()].actionCount + 1
         colorPosition[obj.getDescription()].actions[obj.getName()].flipped = true
-
-        playerTurn = otherColors(obj.getDescription())[1]
     end
     ::done::
 end
@@ -304,6 +322,7 @@ function onLoad()
     newDeck.setInvisibleTo(allColor)
     deck.shuffle()
     initialBL()
+    -- broadcastToAll("Reload the mod if XML buttons are not visible (top right)!")
 end
 
 function inTable(tbl, item)
@@ -428,11 +447,53 @@ function startClicked(player, value, id)
         for i,v in pairs(deckCounter) do
             v.editButton({index = 0, label = deck.getQuantity()})
         end
-        local playerName = Player[player.color].steam_name or "Opponent"
+        local playerName = Player[player.color].steam_name
         broadcastToAll(playerName.."'s turn!", player.color)
     else
-        broadcastToColor("Additional dealing happens after actions are clicked.", player.color, player.color)
+        broadcastToColor("Game already started!", player.color, player.color)
     end
+end
+
+function drawClicked(player, value, id)
+    local playerName = Player[player.color].steam_name
+    if deck.getQuantity() == 21 then
+        broadcastToAll("No one has drawn the first item card! Click Start Game", player.color)
+        for i,v in pairs(deckCounter) do
+            v.highlightOn(stringColorToRGB("Yellow"), 2)
+        end
+        goto done
+    end
+    if #colorPosition[otherColors(player.color)[1]].exchangeZone.getObjects() > 1 or #colorPosition[player.color].exchangeZone.getObjects() > 1 then
+        broadcastToAll("Complete previous action!", playerColor)
+        colorPosition[otherColors(player.color)[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+        colorPosition[player.color].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+        goto done
+    end
+    if deck.getQuantity() == 0 then
+        broadcastToAll("No more cards to draw! Click Score Game", player.color)
+        for i,v in pairs(deckCounter) do
+            v.highlightOn(stringColorToRGB("Yellow"), 2)
+        end
+        goto done
+    end
+    if (player.color == firstPlayer and math.fmod(deck.getQuantity(),2) ~= 0) or (player.color ~= firstPlayer and math.fmod(deck.getQuantity(),2) == 0) then
+        broadcastToColor("You already drew a card or it was drawn for you!", player.color, player.color)
+        goto done
+    end
+    if (player.color == firstPlayer and colorPosition[player.color].actionCount - colorPosition[otherColors(player.color)[1]].actionCount > 0) 
+    or (player.color ~= firstPlayer and colorPosition[otherColors(player.color)[1]].actionCount - colorPosition[player.color].actionCount < 1) then
+        broadcastToColor("You must wait for your opponent to perform an action!", player.color, player.color)
+        goto done
+    end
+
+    deck.deal(1, player.color)
+    Wait.time(function() sortCards(player.color) end, 1)
+    for i,v in pairs(deckCounter) do
+        v.editButton({index = 0, label = deck.getQuantity()})
+    end
+    broadcastToAll(playerName .. "'s turn!", player.color)
+    playerTurn = player.color
+    ::done::
 end
 
 function updateScore()
@@ -462,11 +523,14 @@ function updateScore()
             lanes[k][lowerColor.."Count"] = count
             geisha.editButton({index=0, label=count})
             
-            if count / lanes[k].value > 0.5 then
-                victoryPoints = victoryPoints + lanes[k].value
-                geishas = geishas + 1
+            if count / lanes[k].value > 0.5 and lanes[k].won == false then
                 lanes[k].won = true
                 lanes[k].wonBy = color
+            end
+
+            if lanes[k].wonBy == color then
+                victoryPoints = victoryPoints + lanes[k].value
+                geishas = geishas + 1
             end
         end
 
@@ -488,8 +552,8 @@ function scoreClicked(player, value, id)
         end
     end
     if deck.getQuantity() == 0 then
-        for color in pairs(colorPosition) do
-            if #colorPosition[color].secretZone.getQuantity() > 1 then
+        for i, color in pairs(fixedColor) do
+            if #colorPosition[color].secretZone.getObjects() > 1 then
                 for i,v in pairs(colorPosition[color].secretZone.getObjects()) do
                     if string.sub(v.getName(),1,1) == "P" then
                         v.setHiddenFrom({})
@@ -509,7 +573,7 @@ function scoreClicked(player, value, id)
             end
         end
         updateScore()
-        for color in pairs(colorPosition) do    
+        for i, color in pairs(fixedColor) do    
             local allObjects = getAllObjects()
             for k in pairs(lanes) do
                 local holder = nil
@@ -618,23 +682,42 @@ function onObjectPickUp(playerColor, obj)
         obj.setLock(true)
         Wait.time(|| obj.SetLock(false), 1)
         goto done
+    elseif inTable(colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects(), obj)
+    and ((playerColor == firstPlayer and colorPosition[playerColor].actionCount - colorPosition[otherColors(playerColor)[1]].actionCount > 0) 
+    or (playerColor ~= firstPlayer and colorPosition[otherColors(playerColor)[1]].actionCount - colorPosition[playerColor].actionCount < 1))
+    then
+        broadcastToColor("Opponent needs to complete action!", playerColor, playerColor)
+        obj.Drop()
+        obj.setLock(true)
+        Wait.time(|| obj.SetLock(false), 1)
+        goto done
     end
     if inTable(handObjects, obj) then
         local problem_count = 0
-        if deck.getQuantity() == 8 then
+        if deck.getQuantity() == 21 then
             broadcastToAll("No one has drawn the first item card! Click Start Game", playerColor)
             for i,v in pairs(deckCounter) do
                 v.highlightOn(stringColorToRGB("Yellow"), 2)
             end
             problem_count = problem_count + 1
-        elseif playerColor ~= playerTurn then
-            broadcastToColor("You must wait for your opponent to perform an action!", playerColor, playerColor)
+        -- elseif playerColor ~= playerTurn and #colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects() > 1 then
+        --     broadcastToAll("Complete previous action!", playerColor)
+        --     colorPosition[otherColors(playerColor)[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+        --     problem_count = problem_count + 1
+        elseif playerColor ~= playerTurn and colorPosition[otherColors(playerColor)[1]].actionCount == 0 and colorPosition[playerColor].actionCount == 0 then
+            broadcastToColor("Opponent needs to perform first action!", playerColor, playerColor)
             problem_count = problem_count + 1
-        elseif playerColor == playerTurn and #colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects() > 1 then
-            broadcastToAll("Complete previous action!", playerColor)
+        elseif playerColor ~= playerTurn then
             colorPosition[otherColors(playerColor)[1]].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+            colorPosition[playerColor].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
+            broadcastToColor("Are all actions complete? Do you need to draw an item card?", playerColor, playerColor)
+            problem_count = problem_count + 1
+        elseif (playerColor == firstPlayer and colorPosition[playerColor].actionCount - colorPosition[otherColors(playerColor)[1]].actionCount > 0) 
+        or (playerColor ~= firstPlayer and colorPosition[otherColors(playerColor)[1]].actionCount - colorPosition[playerColor].actionCount < 1) then
+            broadcastToColor("You already performed an action! Opponent's turn.", playerColor, playerColor)
             problem_count = problem_count + 1
         end
+        
 
         if problem_count > 0 then
             obj.Drop()
@@ -755,7 +838,7 @@ function yesResetClicked(player, value, id)
         if v.getDescription() == "Winner" then
             v.setPositionSmooth({lanes[v.getName()].x,1.5,0})
         end
-        if v.getDescription():find("Item") then
+        if v.getDescription():find("Item") or v.getDescription() == "iDeck" then
             discard.putObject(v)
         end
         if string.sub(v.getName(),1,1) == "T" then
