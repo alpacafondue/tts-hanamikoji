@@ -1,3 +1,156 @@
+function onLoad()
+    -- Turns
+    Turns.enable = false
+    Turns.disable_interactations = false
+    Turns.pass_turns = false
+    playerTurn = "Nothing"
+    firstPlayer = "Nothing"
+
+    -- Objects
+    deck = getObjectFromGUID("f56545")
+    newDeck = getObjectFromGUID("1fa18d")
+    deckCounter = {getObjectFromGUID("018a91"), getObjectFromGUID("28a65c")}
+    discard = getObjectFromGUID("7ab66c")
+
+    -- Variables
+    lanes = {
+        ["P1"] = {x = -27, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("d6ec67"), color = "Yellow"},
+        ["P2"] = {x = -18, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("6b35b6"), color = "Red"},
+        ["P3"] = {x = -9, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("d408d9"), color = "Purple"},
+        ["P4"] = {x = 0, value = 3, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("17b4d2"), color = "Blue"},
+        ["P5"] = {x = 9, value = 3, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("78aa39"), color = "Orange"},
+        ["P6"] = {x = 18, value = 4, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("0cf464"), color = "Green"},
+        ["P7"] = {x = 27, value = 5, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("2ead4c"), color = "Pink"},
+    }
+    
+    geishaObj = {["White"]={},["Green"]={}}
+
+    shown = {}
+    gameScored = false
+    tablePolygon = {{-31.5,22.5},{31.5,22.5},{31.5,-22.5},{-31.5,-22.5}}
+
+    -- Player Colors
+    gameColors = Player.getAvailableColors()
+    fixedColor = {"White","Green"}
+    allColor = {"White","Green","Grey"}
+
+    colorPosition = {
+        ["White"] = {polygon = {{-31.5,-1},{31.5,-1},{31.5,-22.5},{-31.5,-22.5}},
+            color = stringColorToRGB("White"), rotation = {0,180,0},
+            secret = getObjectFromGUID("56587e"), secretZone = getObjectFromGUID("370bbb"),
+            discard = getObjectFromGUID("9fd89c"), discardZone = getObjectFromGUID("43080c"),
+            exchange = getObjectFromGUID("43f125"), exchangeZone = getObjectFromGUID("38d3ee"),
+            geishas = 0, victoryPoints = 0, victoryPointG = {getObjectFromGUID("0fc514"),getObjectFromGUID("058652")}, itemZ = -4,
+            actionCount = 0,
+            actions = {
+                ["T1"] = {object = getObjectFromGUID("1330b8"), flipped = false},
+                ["T2"] = {object = getObjectFromGUID("669d04"), flipped = false},
+                ["T3"] = {object = getObjectFromGUID("ae2b73"), flipped = false},
+                ["T4"] = {object = getObjectFromGUID("af7a78"), flipped = false},
+            },
+        },
+        ["Green"] = {polygon = {{-31.5,1},{31.5,1},{31.5,22.5},{-31.5,22.5}},
+            color = stringColorToRGB("Green"), rotation = {0,0,0},
+            secret = getObjectFromGUID("49165e"), secretZone = getObjectFromGUID("d88993"),
+            discard = getObjectFromGUID("303d85"), discardZone = getObjectFromGUID("5672a0"),
+            exchange = getObjectFromGUID("e2ba71"), exchangeZone = getObjectFromGUID("339b41"),
+            geishas = 0, victoryPoints = 0, victoryPointG = {getObjectFromGUID("392c35"),getObjectFromGUID("38f746")}, itemZ = 4,
+            actionCount = 0,
+            actions = {
+                ["T1"] = {object = getObjectFromGUID("1169a5"), flipped = false},
+                ["T2"] = {object = getObjectFromGUID("901b37"), flipped = false},
+                ["T3"] = {object = getObjectFromGUID("9c0565"), flipped = false},
+                ["T4"] = {object = getObjectFromGUID("efd693"), flipped = false},
+            },
+        },
+    }
+
+    -- Hide decks adn shuffle
+    discard.setInvisibleTo(allColor)
+    deck.setInvisibleTo(allColor)
+    newDeck.setInvisibleTo(allColor)
+    deck.shuffle()
+
+    --Button Label creation
+    initialBL()
+end
+
+function initialBL()
+    local getAllObjects = getAllObjects()
+
+    for i,v in pairs(getAllObjects) do
+        -- Disable Geisha holder interaction
+        if string.sub(v.getName(),1,1) == "P" and inTable(fixedColor, v.getDescription()) then
+            v.interactable = false
+        end
+        -- Create Action Buttons
+        if string.sub(v.getName(),1,1) == "T" then
+            actionButton(v)
+            if v.getName() == "T1" then v.editButton({index=0, tooltip="1: Save 1"}) end
+            if v.getName() == "T2" then v.editButton({index=0, tooltip="2: Discard 2"}) end
+            if v.getName() == "T3" then v.editButton({index=0, tooltip="3: Give 1 Take 2"}) end
+            if v.getName() == "T4" then v.editButton({index=0, tooltip="4: Give Pair Take Pair"}) end
+        end
+        -- Geishas
+        if string.sub(v.getName(),1,1) == "P" and v.getDescription() == "Geisha" then
+            -- Create lane count label
+            geishaLabel(v)
+            v.editButton({index = 0, font_color = lanes[v.getName()].color})
+            -- Create snap points
+            v.setSnapPoints({
+                {position = {0,0,3}},
+                {position = {0,0,3.5}},
+                {position = {0,0,4}},
+                {position = {0,0,4.5}},
+            })
+            -- Build table with snap point positions relative to world
+            local snaps = {}
+            for j,k in pairs(v.getSnapPoints()) do
+                snaps["sp"..j] = {position=v.positionToWorld(k["position"]),filled=false}
+            end
+            for j,k in pairs(fixedColor) do
+                if inPoly(colorPosition[k].polygon, v) then
+                    geishaObj[k][v.getName()] = {object=v, points=snaps}
+                end
+            end
+        end
+        -- Create Victory Point labels
+        if v.getName() == "Victory Points" then
+            v.interactable = false
+            vpLabel(v)
+            if v.getDescription() == "Green" then
+                v.editButton({index = 0, font_color = "Green"})
+            end
+        end
+        -- Create deck counter labels
+        if v.getName() == "Deck Counter" then
+            v.interactable = false
+            deckLabel(v)
+        end
+        -- Create zone snap points
+        if v.getName() == "SECRET" then
+            v.interactable = false
+            v.setSnapPoints({{position = {0,0,0}}})
+        end
+        if v.getName() == "DISCARD" then
+            v.interactable = false
+            v.setSnapPoints({
+                {position = {0.25,0,0}},
+                {position = {-0.25,0,0}}
+            })
+        end
+        if v.getName() == "EXCHANGE" then
+            v.interactable = false
+            v.setSnapPoints({
+                {position = {0.25,0,0.25}},
+                {position = {0.25,0,-0.25}},
+                {position = {-0.25,0,-0.25}},
+                {position = {-0.25,0,0.25}}
+            })
+        end
+    end
+end
+
 -- Menu buttons
 function showButtons(player, value, id)
     if shown.buttons == false then
@@ -36,6 +189,68 @@ function showForPlayer(params)
           Global.UI.setAttribute(panel, "visibility", opened .. "|" .. color)
        end
     end
+end
+
+function cardButton(obj)
+    local button = {}
+    button.click_function = "cardClick"
+    button.height = 1000
+    button.width = 800
+    button.position={0,0,0}
+    button.tooltip="Select: "..lanes[obj.getName()].color.." "..lanes[obj.getName()].value
+    button.color={r=25/255, g=25/255, b=25/255, a=0/255}
+    obj.createButton(button)
+end
+
+function cardClick(obj, playerColor)
+    local zone = nil
+    local zoneColor = nil
+    local zoneCount = 0
+    local ge = geishaObj[playerColor][obj.getName()]
+    local playerName = Player[otherColors(playerColor)[1]].steam_name or "Opponent"
+
+    for i,v in pairs(fixedColor) do
+        local czone = colorPosition[v].exchangeZone.getObjects()
+        if inTable(czone, obj) then
+            zone = czone
+            zoneColor = v
+            zoneCount = #czone
+        end
+    end
+
+    if playerColor == zoneColor and zoneCount > 3 then
+        broadcastToColor("Let opponent claim their cards first!", playerColor, playerColor)
+        goto done
+    end
+    if playerColor ~= zoneColor and zoneCount < 4 then
+        broadcastToColor("You already claimed your cards!", playerColor, playerColor)
+        goto done
+    end
+
+    for i, snap in pairs(ge.points) do
+        if snap.filled == true then
+        else
+            geishaObj[playerColor][obj.getName()].points[i].filled = true
+            obj.removeButton(0)
+            obj.setLock(false)
+            obj.setPositionSmooth({snap.position.x, 1.65, snap.position.z}, false, false)
+            obj.setRotationSmooth(colorPosition[playerColor].rotation, false, false)
+            break
+        end
+    end
+    
+    if playerColor == zoneColor and zoneCount == 2 and deck.getQuantity() > 0 then
+        deck.deal(1, otherColors(playerColor)[1])
+        Wait.time(function() sortCards(otherColors(playerColor)[1]) end, 1)
+        for i,v in pairs(deckCounter) do
+            v.editButton({index = 0, label = deck.getQuantity()})
+        end
+        broadcastToAll(playerName .. "'s turn!", otherColors(playerColor)[1])
+        playerTurn = otherColors(playerColor)[1]
+    end
+    
+    Wait.time(updateScore, 1)
+    ::done::
 end
 
 function actionButton(obj)
@@ -124,6 +339,18 @@ function actionClick(obj, playerColor)
 
         colorPosition[obj.getDescription()].actionCount = colorPosition[obj.getDescription()].actionCount + 1
         colorPosition[obj.getDescription()].actions[obj.getName()].flipped = true
+
+        for i,v in pairs({"secret","discard","exchange"}) do
+            for j,k in pairs(colorPosition[obj.getDescription()][v.."Zone"].getObjects()) do
+                if string.sub(k.getName(),1,1) == "P" then
+                    k.setLock(true)
+                    if v == "exchange" then
+                        cardButton(k)
+                    end
+                end
+            end
+        end
+        
     end
     ::done::
 end
@@ -197,133 +424,10 @@ function exchangeLabel(obj)
     obj.createButton(button)
 end
 
-function initialBL()
-    local getAllObjects = getAllObjects()
-    -- Create Action buttons
-    for i,v in pairs(getAllObjects) do
-        if string.sub(v.getName(),1,1) == "P" and inTable(fixedColor, v.getDescription()) then
-            v.interactable = false
-        end
-        if string.sub(v.getName(),1,1) == "T" then
-            actionButton(v)
-        end
-        if string.sub(v.getName(),1,1) == "P" and v.getDescription() == "Geisha" then
-            geishaLabel(v)
-            v.editButton({index = 0, font_color = lanes[v.getName()].color})
-            v.setSnapPoints({
-                {position = {0,0,3}},
-                {position = {0,0,3.5}},
-                {position = {0,0,4}},
-                {position = {0,0,4.5}},
-            })
-        end
-        if v.getName() == "Victory Points" then
-            v.interactable = false
-            vpLabel(v)
-            if v.getDescription() == "Green" then
-                v.editButton({index = 0, font_color = "Green"})
-            end
-        end
-        if v.getName() == "Deck Counter" then
-            v.interactable = false
-            deckLabel(v)
-        end
-        if v.getName() == "SECRET" then
-            v.interactable = false
-            v.setSnapPoints({{position = {0,0,0}}})
-        end
-        if v.getName() == "DISCARD" then
-            v.interactable = false
-            v.setSnapPoints({
-                {position = {0.25,0,0}},
-                {position = {-0.25,0,0}}
-            })
-        end
-        if v.getName() == "EXCHANGE" then
-            v.interactable = false
-            v.setSnapPoints({
-                {position = {0.25,0,0.25}},
-                {position = {0.25,0,-0.25}},
-                {position = {-0.25,0,-0.25}},
-                {position = {-0.25,0,0.25}}
-            })
-        end
-    end
-end
-
-function onLoad()
-    -- Turns
-    Turns.enable = false
-    Turns.disable_interactations = false
-    Turns.pass_turns = false
-    playerTurn = "Nothing"
-    firstPlayer = "Nothing"
-
-    -- Objects
-    deck = getObjectFromGUID("f56545")
-    newDeck = getObjectFromGUID("1fa18d")
-    deckCounter = {getObjectFromGUID("018a91"), getObjectFromGUID("28a65c")}
-    discard = getObjectFromGUID("7ab66c")
-
-    -- Variables
-    lanes = {
-        ["P1"] = {x = -27, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("d6ec67"), color = "Yellow"},
-        ["P2"] = {x = -18, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("6b35b6"), color = "Red"},
-        ["P3"] = {x = -9, value = 2, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("d408d9"), color = "Purple"},
-        ["P4"] = {x = 0, value = 3, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("17b4d2"), color = "Blue"},
-        ["P5"] = {x = 9, value = 3, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("78aa39"), color = "Orange"},
-        ["P6"] = {x = 18, value = 4, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("0cf464"), color = "Green"},
-        ["P7"] = {x = 27, value = 5, won = false, wonBy = nil, ["whiteCount"] = 0, ["greenCount"] = 0, token = getObjectFromGUID("2ead4c"), color = "Pink"},
-    }
-
-    shown = {}
-    tablePolygon = {{-31.5,22.5},{31.5,22.5},{31.5,-22.5},{-31.5,-22.5}}
-
-    -- Player Colors
-    gameColors = Player.getAvailableColors()
-    fixedColor = {"White","Green"}
-    allColor = {"White","Green","Grey"}
-
-    colorPosition = {
-        ["White"] = {polygon = {{-31.5,-1},{31.5,-1},{31.5,-22.5},{-31.5,-22.5}},
-            color = stringColorToRGB("White"), rotation = {0,180,0},
-            secret = getObjectFromGUID("56587e"), secretZone = getObjectFromGUID("370bbb"),
-            discard = getObjectFromGUID("9fd89c"), discardZone = getObjectFromGUID("43080c"),
-            exchange = getObjectFromGUID("43f125"), exchangeZone = getObjectFromGUID("38d3ee"),
-            geishas = 0, victoryPoints = 0, victoryPointG = {getObjectFromGUID("0fc514"),getObjectFromGUID("058652")}, itemZ = -4,
-            actionCount = 0,
-            actions = {
-                ["T1"] = {object = getObjectFromGUID("1330b8"), flipped = false},
-                ["T2"] = {object = getObjectFromGUID("669d04"), flipped = false},
-                ["T3"] = {object = getObjectFromGUID("ae2b73"), flipped = false},
-                ["T4"] = {object = getObjectFromGUID("af7a78"), flipped = false},
-            },
-        },
-        ["Green"] = {polygon = {{-31.5,1},{31.5,1},{31.5,22.5},{-31.5,22.5}},
-            color = stringColorToRGB("Green"), rotation = {0,0,0},
-            secret = getObjectFromGUID("49165e"), secretZone = getObjectFromGUID("d88993"),
-            discard = getObjectFromGUID("303d85"), discardZone = getObjectFromGUID("5672a0"),
-            exchange = getObjectFromGUID("e2ba71"), exchangeZone = getObjectFromGUID("339b41"),
-            geishas = 0, victoryPoints = 0, victoryPointG = {getObjectFromGUID("392c35"),getObjectFromGUID("38f746")}, itemZ = 4,
-            actionCount = 0,
-            actions = {
-                ["T1"] = {object = getObjectFromGUID("1169a5"), flipped = false},
-                ["T2"] = {object = getObjectFromGUID("901b37"), flipped = false},
-                ["T3"] = {object = getObjectFromGUID("9c0565"), flipped = false},
-                ["T4"] = {object = getObjectFromGUID("efd693"), flipped = false},
-            },
-        },
-    }
-
-    
-    -- Deal out initial hand
-    discard.setInvisibleTo(allColor)
-    deck.setInvisibleTo(allColor)
-    newDeck.setInvisibleTo(allColor)
-    deck.shuffle()
-    initialBL()
-    -- broadcastToAll("Reload the mod if XML buttons are not visible (top right)!")
-end
+function round(num, numDecimalPlaces)
+    local mult = 10^(numDecimalPlaces or 0)
+    return math.floor(num * mult + 0.5) / mult
+  end
 
 function inTable(tbl, item)
     for key, value in pairs(tbl) do
@@ -449,6 +553,10 @@ function startClicked(player, value, id)
         end
         local playerName = Player[player.color].steam_name
         broadcastToAll(playerName.."'s turn!", player.color)
+    elseif deck.getQuantity() == 0 and gameScored == true then
+        nextRound()
+    elseif deck.getQuantity() == 0 and gameScored == false then
+        broadcastToAll("Game has not been scored!", player.color, player.color)
     else
         broadcastToColor("Game already started!", player.color, player.color)
     end
@@ -513,6 +621,9 @@ function updateScore()
                     v.setPositionSmooth({lanes[v.getName()].x,curr_pos.y,curr_pos.z}, false, false)
                     v.setRotationSmooth(colorPosition[color].rotation, false, false)
                     v.setHiddenFrom({})
+                    -- if v.getButtons() then
+                    --     v.removeButton(0)
+                    -- end
                     count = count + 1
                 elseif inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == "Geisha" then
                     geisha = v
@@ -523,7 +634,7 @@ function updateScore()
             lanes[k][lowerColor.."Count"] = count
             geisha.editButton({index=0, label=count})
             
-            if count / lanes[k].value > 0.5 and lanes[k].won == false then
+            if count / lanes[k].value > 0.55 and lanes[k].won == false then
                 lanes[k].won = true
                 lanes[k].wonBy = color
             end
@@ -593,8 +704,8 @@ function scoreClicked(player, value, id)
                 y.editButton({index = 0, label = colorPosition[color].victoryPoints})
             end
         end
-        nextRound()
     end
+    gameScored = true
     ::done::
 end
 
@@ -608,6 +719,11 @@ function nextRound()
             local playerName = Player[v].steam_name or "Opponent"
             broadcastToAll(playerName.."is the winner!", v)
             goto done
+        end
+        for k in pairs(geishaObj[v]) do
+            for x, y in pairs(geishaObj[v][k].points) do
+                geishaObj[v][k].points[x].filled = false
+            end
         end
     end
     for i,v in pairs(allObjects) do
@@ -631,6 +747,7 @@ function nextRound()
     
     firstPlayer = otherColors(firstPlayer)[1]
     playerTurn = firstPlayer
+    gameScored = false
 
     Wait.condition(
         function() 
@@ -652,6 +769,7 @@ function nextRound()
     )
 
     broadcastToAll("The battle continues!", firstPlayer)
+    Wait.time(updateScore, 1)
     ::done::
 end
 
@@ -662,35 +780,36 @@ function onObjectPickUp(playerColor, obj)
     local handObjects = Player[playerColor].getHandObjects()
 
     if inTable(Player[otherColors(playerColor)[1]].getHandObjects(), obj)
-    or inTable(colorPosition[otherColors(playerColor)[1]].secretZone.getObjects(), obj)
-    or inTable(colorPosition[otherColors(playerColor)[1]].discardZone.getObjects(), obj)
+    -- or inTable(colorPosition[otherColors(playerColor)[1]].secretZone.getObjects(), obj)
+    -- or inTable(colorPosition[otherColors(playerColor)[1]].discardZone.getObjects(), obj)
     then
-        broadcastToColor("You can only select from the exchange area!", playerColor, playerColor)
+        -- broadcastToColor("You can only select from the exchange area!", playerColor, playerColor)
+        broadcastToColor("You can move cards from your own hand!", playerColor, playerColor)
         obj.Drop()
         obj.setLock(true)
         Wait.time(|| obj.SetLock(false), 1)
         goto done
-    elseif inTable(secretObjects, obj) and colorPosition[playerColor].actions["T1"].flipped == true then
-        broadcastToColor("You already placed this item card in the secret area!", playerColor, playerColor)
-        obj.Drop()
-        obj.setLock(true)
-        Wait.time(|| obj.SetLock(false), 1)
-        goto done
-    elseif inTable(discardObjects, obj) and colorPosition[playerColor].actions["T2"].flipped == true then
-        broadcastToColor("You already placed this item card in the discard area!", playerColor, playerColor)
-        obj.Drop()
-        obj.setLock(true)
-        Wait.time(|| obj.SetLock(false), 1)
-        goto done
-    elseif inTable(colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects(), obj)
-    and ((playerColor == firstPlayer and colorPosition[playerColor].actionCount - colorPosition[otherColors(playerColor)[1]].actionCount > 0) 
-    or (playerColor ~= firstPlayer and colorPosition[otherColors(playerColor)[1]].actionCount - colorPosition[playerColor].actionCount < 1))
-    then
-        broadcastToColor("Opponent needs to complete action!", playerColor, playerColor)
-        obj.Drop()
-        obj.setLock(true)
-        Wait.time(|| obj.SetLock(false), 1)
-        goto done
+    -- elseif inTable(secretObjects, obj) and colorPosition[playerColor].actions["T1"].flipped == true then
+    --     broadcastToColor("You already placed this item card in the secret area!", playerColor, playerColor)
+    --     obj.Drop()
+    --     obj.setLock(true)
+    --     Wait.time(|| obj.SetLock(false), 1)
+    --     goto done
+    -- elseif inTable(discardObjects, obj) and colorPosition[playerColor].actions["T2"].flipped == true then
+    --     broadcastToColor("You already placed this item card in the discard area!", playerColor, playerColor)
+    --     obj.Drop()
+    --     obj.setLock(true)
+    --     Wait.time(|| obj.SetLock(false), 1)
+    --     goto done
+    -- elseif inTable(colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects(), obj)
+    -- and ((playerColor == firstPlayer and colorPosition[playerColor].actionCount - colorPosition[otherColors(playerColor)[1]].actionCount > 0) 
+    -- or (playerColor ~= firstPlayer and colorPosition[otherColors(playerColor)[1]].actionCount - colorPosition[playerColor].actionCount < 1))
+    -- then
+    --     broadcastToColor("Opponent needs to complete action!", playerColor, playerColor)
+    --     obj.Drop()
+    --     obj.setLock(true)
+    --     Wait.time(|| obj.SetLock(false), 1)
+    --     goto done
     end
     if inTable(handObjects, obj) then
         local problem_count = 0

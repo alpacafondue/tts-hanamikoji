@@ -6,8 +6,8 @@
 
 <Button id="showButtons" onClick="showButtons" width="23" height="25" text="&#x25B2;" fontSize="12" rectAlignment="UpperRight" offsetXY="-414 0"></Button>
 
-<VerticalLayout id="buttons" padding="0 0 0 20" rectAlignment="UpperRight" offsetXY="-250 0" height="150" width="164">
-  <Button id="startGame" onClick="startClicked" text="Start Game"></Button>
+<VerticalLayout id="buttons" padding="0 0 0 20" rectAlignment="UpperRight" offsetXY="-250 0" height="200" width="164">
+  <Button id="startGame" onClick="startClicked" text="Start Game&#xA;Next Round"></Button>
   <Button id="drawCard" onClick="drawClicked" text="Draw Item Card"></Button>
   <Button id="scoreGame" onClick="scoreClicked" text="Score Game"></Button>
   <Button id="resetGame" onClick="resetClicked" text="Reset Game"></Button>
