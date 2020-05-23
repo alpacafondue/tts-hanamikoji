@@ -238,18 +238,24 @@ function cardClick(obj, playerColor)
             break
         end
     end
-    
-    if playerColor == zoneColor and zoneCount == 2 and deck.getQuantity() > 0 then
-        deck.deal(1, otherColors(playerColor)[1])
-        Wait.time(function() sortCards(otherColors(playerColor)[1]) end, 1)
-        for i,v in pairs(deckCounter) do
-            v.editButton({index = 0, label = deck.getQuantity()})
+
+    Wait.condition(
+        function()
+            updateScore();
+            if playerColor == zoneColor and zoneCount == 2 and deck.getQuantity() > 0 then
+                deck.deal(1, otherColors(playerColor)[1])
+                Wait.time(function() sortCards(otherColors(playerColor)[1]) end, 1)
+                for i,v in pairs(deckCounter) do
+                    v.editButton({index = 0, label = deck.getQuantity()})
+                end
+                broadcastToAll(playerName .. "'s turn!", otherColors(playerColor)[1])
+                playerTurn = otherColors(playerColor)[1]
+            end;
+        end,
+        function()
+            return not obj.isSmoothMoving()
         end
-        broadcastToAll(playerName .. "'s turn!", otherColors(playerColor)[1])
-        playerTurn = otherColors(playerColor)[1]
-    end
-    
-    Wait.time(updateScore, 1)
+    )
     ::done::
 end
 
@@ -605,36 +611,81 @@ function drawClicked(player, value, id)
 end
 
 function updateScore()
-    local allObjects = getAllObjects()
     for color in pairs(colorPosition) do
         local lowerColor = string.lower(color)
-        local victoryPoints = 0
-        local geishas = 0
         
         for k in pairs(lanes) do
             local count = 0
             local geisha = nil
 
-            for i,v in pairs(allObjects) do
-                if inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == "ItemOK" then
+            for i,v in pairs(getAllObjects()) do
+                if inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription():find("Item") then
                     local curr_pos = v.getPosition()
-                    v.setPositionSmooth({lanes[v.getName()].x,curr_pos.y,curr_pos.z}, false, false)
                     v.setRotationSmooth(colorPosition[color].rotation, false, false)
                     v.setHiddenFrom({})
-                    -- if v.getButtons() then
-                    --     v.removeButton(0)
-                    -- end
+                    if v.getPosition().x ~= lanes[v.getName()].x then
+                        v.setPositionSmooth({lanes[v.getName()].x,curr_pos.y,curr_pos.z}, false, false)
+                    end
                     count = count + 1
                 elseif inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == "Geisha" then
                     geisha = v
-                elseif inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == color then
-                    holder = v
                 end
             end
             lanes[k][lowerColor.."Count"] = count
             geisha.editButton({index=0, label=count})
-            
-            if count / lanes[k].value > 0.55 and lanes[k].won == false then
+        end
+    end
+end
+
+function getCards()
+    for i, color in pairs(fixedColor) do
+        if #colorPosition[color].secretZone.getObjects() > 1 then
+            for i,v in pairs(colorPosition[color].secretZone.getObjects()) do
+                if string.sub(v.getName(),1,1) == "P" then
+                    v.setHiddenFrom({})
+                    v.setLock(false)
+                    v.setPositionSmooth({lanes[v.getName()].x,1.55,colorPosition[color].discard.getPosition().z}, false, false)
+                    v.setRotationSmooth(colorPosition[color].rotation, false, false)
+                    Wait.condition(
+                        function()
+                            updateScore();
+                            getScored()
+                        end,
+                        function()
+                            return not v.isSmoothMoving()
+                        end
+                    )
+                end
+            end
+        end
+        
+        if #colorPosition[color].discardZone.getObjects() > 1 then
+            for i,v in pairs(colorPosition[color].discardZone.getObjects()) do
+                if string.sub(v.getName(),1,1) == "P" then
+                    v.setHiddenFrom({})
+                    v.setLock(false)
+                    discard.putObject(v)
+                end
+            end
+        end
+    end
+end
+
+function getScored()
+    for i, color in pairs(fixedColor) do    
+        local lowerColor = string.lower(color)
+        local victoryPoints = 0
+        local geishas = 0
+        for k in pairs(lanes) do
+            local holder = nil
+
+            for i,v in pairs(getAllObjects()) do
+                if inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == color then
+                    holder = v
+                end
+            end
+
+            if lanes[k][lowerColor.."Count"] > lanes[k][string.lower(otherColors(color)[1]).."Count"] and lanes[k].won == false then
                 lanes[k].won = true
                 lanes[k].wonBy = color
             end
@@ -643,10 +694,19 @@ function updateScore()
                 victoryPoints = victoryPoints + lanes[k].value
                 geishas = geishas + 1
             end
+
+            if lanes[k].wonBy == color then
+                lanes[k].token.setPositionSmooth({lanes[k].x,1.65,colorPosition[color].itemZ}, false, false)
+                holder.setColorTint({r=25/255, g=25/255, b=25/255})
+            end
         end
 
         colorPosition[color].victoryPoints = victoryPoints
         colorPosition[color].geishas = geishas
+
+        for x,y in pairs(colorPosition[color].victoryPointG) do
+            y.editButton({index = 0, label = colorPosition[color].victoryPoints})
+        end
     end
 end
 
@@ -661,63 +721,34 @@ function scoreClicked(player, value, id)
             colorPosition[v].exchange.highlightOn(stringColorToRGB("Yellow"), 2)
             goto done
         end
+        if #Player[v].getHandObjects() > 0 then
+            broadcastToAll("Cards still in hand!", player.color)
+            goto done
+        end
+        if not(colorPosition[v].actionCount == 4) then
+            broadcastToAll("Not all actions are complete!", player.color)
+            goto done
+        end
     end
     if deck.getQuantity() == 0 then
-        for i, color in pairs(fixedColor) do
-            if #colorPosition[color].secretZone.getObjects() > 1 then
-                for i,v in pairs(colorPosition[color].secretZone.getObjects()) do
-                    if string.sub(v.getName(),1,1) == "P" then
-                        v.setHiddenFrom({})
-                        v.setPosition({lanes[v.getName()].x,1.55,colorPosition[color].discard.getPosition().z})
-                        v.setRotation(colorPosition[color].rotation)
-                    end
-                end
-            end
-            
-            if #colorPosition[color].discardZone.getObjects() > 1 then
-                for i,v in pairs(colorPosition[color].discardZone.getObjects()) do
-                    if string.sub(v.getName(),1,1) == "P" then
-                        v.setHiddenFrom({})
-                        discard.putObject(v)
-                    end
-                end
-            end
-        end
-        updateScore()
-        for i, color in pairs(fixedColor) do    
-            local allObjects = getAllObjects()
-            for k in pairs(lanes) do
-                local holder = nil
-
-                for i,v in pairs(allObjects) do
-                    if inPoly(colorPosition[color].polygon, v) and v.getName() == k and v.getDescription() == color then
-                        holder = v
-                    end
-                end
-                if lanes[k].wonBy == color then
-                    lanes[k].token.setPositionSmooth({lanes[k].x,1.65,colorPosition[color].itemZ})
-                    holder.setColorTint({r=25/255, g=25/255, b=25/255})
-                end
-            end
-
-            for x,y in pairs(colorPosition[color].victoryPointG) do
-                y.editButton({index = 0, label = colorPosition[color].victoryPoints})
-            end
-        end
+        getCards()
+        gameScored = true
     end
-    gameScored = true
     ::done::
 end
 
 function nextRound()
-    local allObjects = getAllObjects()
     local deckObjects = deck.getObjects()
-    local nd = newDeck.takeObject()
 
     for i,v in pairs(fixedColor) do
-        if colorPosition[v].geishas > 3 or colorPosition[v].victoryPoints > 10 then
+        if colorPosition[v].victoryPoints > 10 then
             local playerName = Player[v].steam_name or "Opponent"
-            broadcastToAll(playerName.."is the winner!", v)
+            broadcastToAll(playerName.." is the winner!", v)
+            goto done
+        end
+        if colorPosition[v].geishas > 3 then
+            local playerName = Player[v].steam_name or "Opponent"
+            broadcastToAll(playerName.." is the winner!", v)
             goto done
         end
         for k in pairs(geishaObj[v]) do
@@ -726,7 +757,7 @@ function nextRound()
             end
         end
     end
-    for i,v in pairs(allObjects) do
+    for i,v in pairs(getAllObjects()) do
         if v.getDescription():find("Item") then
             discard.putObject(v)
         end
@@ -749,6 +780,8 @@ function nextRound()
     playerTurn = firstPlayer
     gameScored = false
 
+    nd = newDeck.takeObject()
+
     Wait.condition(
         function() 
             for i = 1,21 do
@@ -769,7 +802,7 @@ function nextRound()
     )
 
     broadcastToAll("The battle continues!", firstPlayer)
-    Wait.time(updateScore, 1)
+    Wait.frames(updateScore, 60)
     ::done::
 end
 
@@ -780,8 +813,9 @@ function onObjectPickUp(playerColor, obj)
     local handObjects = Player[playerColor].getHandObjects()
 
     if inTable(Player[otherColors(playerColor)[1]].getHandObjects(), obj)
-    -- or inTable(colorPosition[otherColors(playerColor)[1]].secretZone.getObjects(), obj)
-    -- or inTable(colorPosition[otherColors(playerColor)[1]].discardZone.getObjects(), obj)
+    or inTable(colorPosition[otherColors(playerColor)[1]].secretZone.getObjects(), obj)
+    or inTable(colorPosition[otherColors(playerColor)[1]].discardZone.getObjects(), obj)
+    or inTable(colorPosition[otherColors(playerColor)[1]].exchangeZone.getObjects(), obj)
     then
         -- broadcastToColor("You can only select from the exchange area!", playerColor, playerColor)
         broadcastToColor("You can move cards from your own hand!", playerColor, playerColor)
@@ -894,7 +928,8 @@ function onObjectDrop(playerColor, obj)
         broadcastToColor("Item cards can only be played from the exchange area!", playerColor, playerColor)
         problem_count = problem_count + 1
     elseif inPoly(tablePolygon, obj) then
-        updateScore()
+        -- Wait.time(updateScore, 1)
+        Wait.frames(updateScore, 60)
     end
 
     if inTable(secretObjects, obj) and #secretObjects > 2 then
@@ -915,6 +950,9 @@ function onObjectDrop(playerColor, obj)
     
     if inTable(exchangeObjects, obj) and #exchangeObjects > 5 then
         broadcastToColor("You already have 4 exchange item cards!", playerColor, playerColor)
+        problem_count = problem_count + 1
+    elseif inTable(exchangeObjects, obj) and colorPosition[playerColor].actions["T3"].flipped == true and colorPosition[playerColor].actions["T4"].flipped == true then
+        broadcastToColor("You already exchanged!!", playerColor, playerColor)
         problem_count = problem_count + 1
     elseif inTable(exchangeObjects, obj) then
         obj.setDescription("ItemOK")
@@ -955,7 +993,7 @@ function yesResetClicked(player, value, id)
             v.setColorTint({r=25/255, g=25/255, b=25/255, a=0/255})
         end
         if v.getDescription() == "Winner" then
-            v.setPositionSmooth({lanes[v.getName()].x,1.5,0})
+            v.setPositionSmooth({lanes[v.getName()].x,1.5,0}, false, false)
         end
         if v.getDescription():find("Item") or v.getDescription() == "iDeck" then
             discard.putObject(v)
